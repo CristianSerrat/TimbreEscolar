@@ -21,7 +21,7 @@
     },
     {
       "id": 3,
-      "hora": "12:00",
+      "hora": "12:52",
       "descripcion": "Fin de clases - Mañana",
       "audio_especifico": "audios/salida.mp3",
       "activo": true

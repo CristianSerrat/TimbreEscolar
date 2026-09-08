@@ -1,0 +1,30 @@
+{
+  "configuracion_global": {
+    "audio_por_defecto": "audios/timbre_default.mp3",
+    "volumen_por_defecto": 0.8,
+    "zona_horaria": "Europe/Madrid"
+  },
+  "horarios": [
+    {
+      "id": 1,
+      "hora": "08:00",
+      "descripcion": "Inicio de clases - Mañana",
+      "audio_especifico": null,
+      "activo": true
+    },
+    {
+      "id": 2,
+      "hora": "10:30",
+      "descripcion": "Recreo de la mañana",
+      "audio_especifico": null,
+      "activo": true
+    },
+    {
+      "id": 3,
+      "hora": "12:00",
+      "descripcion": "Fin de clases - Mañana",
+      "audio_especifico": "audios/salida.mp3",
+      "activo": true
+    }
+  ]
+}

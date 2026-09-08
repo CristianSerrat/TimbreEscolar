@@ -19,7 +19,7 @@ import time
 from datetime import datetime, time as dt_time
 from pathlib import Path
 
-from nicegui import ui, app
+from nicegui import ui, app, Client
 import pytz
 import pygame
 
@@ -257,11 +257,18 @@ def hora_coincide(hora_actual: dt_time, hora_programada: dt_time) -> bool:
 # NOTIFICACIONES A CLIENTES WEB
 # ============================================================
 def notificar_clientes(mensaje: str, tipo: str = "positive"):
-    """Envía notificaciones a todas las sesiones web conectadas sin error de slot."""
-    for client in app.clients():
+    """Envía notificaciones a todas las sesiones web activas sin depender del slot context."""
+    payload = {
+        "message": str(mensaje),
+        "type": tipo,
+        "closeBtn": True,
+        "position": "bottom",
+        "multiLine": False,
+    }
+    for client in list(Client.instances.values()):
         try:
-            with client:
-                ui.notify(mensaje, type=tipo, close_button=True)
+            if getattr(client, "has_socket_connection", False):
+                client.outbox.enqueue_message("notify", payload, client.id)
         except Exception:
             pass
 

@@ -152,7 +152,7 @@ def validar_y_normalizar_horarios(horarios: list, config_global: dict, base_dir:
     return horarios_validados
 
 
-def recargar_configuracion() -> bool:
+def recargar_configuracion() -> tuple[bool, str]:
     """Lee config.json del disco y actualiza el estado global."""
     try:
         config = cargar_configuracion()
@@ -166,11 +166,17 @@ def recargar_configuracion() -> bool:
             estado_sistema["config_mtime"] = CONFIG_PATH.stat().st_mtime
         except Exception:
             pass
-        log(f"Configuración cargada correctamente ({len(estado_sistema['horarios'])} horarios)", "ok")
-        return True
+        msg = f"Configuración cargada correctamente ({len(estado_sistema['horarios'])} horarios)"
+        log(msg, "ok")
+        return True, msg
+    except json.JSONDecodeError as e:
+        msg = f"Error de formato JSON (línea {e.lineno}, col {e.colno}): {e.msg}"
+        log(msg, "error")
+        return False, msg
     except Exception as e:
-        log(f"Error cargando config.json: {e}", "error")
-        return False
+        msg = f"Error cargando config.json: {e}"
+        log(msg, "error")
+        return False, msg
 
 
 def verificar_actualizacion_config():
@@ -179,8 +185,11 @@ def verificar_actualizacion_config():
         mtime = CONFIG_PATH.stat().st_mtime
         if mtime != estado_sistema["config_mtime"]:
             log("Cambio detectado en config.json. Recargando automáticamente...", "info")
-            recargar_configuracion()
-            notificar_clientes("Configuración recargada desde el disco", tipo="info")
+            exito, msg = recargar_configuracion()
+            if exito:
+                notificar_clientes(f"Configuración recargada: {msg}", tipo="info")
+            else:
+                notificar_clientes(f"❌ {msg}", tipo="negative")
     except Exception:
         pass
 
@@ -413,45 +422,56 @@ def crear_estado_sistema():
             ui.timer(interval=2.0, callback=actualizar_vista_estado)
 
 
-def crear_tabla_horarios(contenedor_tabla):
-    contenedor_tabla.clear()
-    with contenedor_tabla:
-        with ui.card().classes("w-full shadow-sm"):
-            with ui.row().classes("w-full items-center justify-between mb-2"):
-                ui.label("📋 Horarios Programados").classes("text-lg font-semibold text-gray-700")
-                
-                async def refrescar_tabla():
-                    recargar_configuracion()
-                    crear_tabla_horarios(contenedor_tabla)
-                    ui.notify("Horarios recargados desde config.json", type="positive")
+def obtener_filas_horarios() -> list[dict]:
+    """Genera las filas para ui.table a partir del estado global."""
+    filas = []
+    for h in estado_sistema.get("horarios", []):
+        audio_nombre = h["ruta_audio"].name if h["ruta_audio"] else "🎵 Por defecto"
+        activo = "🟢 Activo" if h.get("activo", True) else "🔴 Inactivo"
+        filas.append({
+            "id": h["id"],
+            "hora": h["hora_str"],
+            "descripcion": h.get("descripcion", "-"),
+            "audio": audio_nombre,
+            "estado": activo
+        })
+    return filas
 
-                ui.button("Recargar config.json", icon="refresh", color="gray-700", on_click=refrescar_tabla).props("outline size=sm")
 
-            horarios = estado_sistema.get("horarios", [])
-            columnas = [
-                {"name": "id", "label": "ID", "field": "id", "align": "center", "sortable": True},
-                {"name": "hora", "label": "Hora", "field": "hora", "align": "center", "sortable": True},
-                {"name": "descripcion", "label": "Descripción", "field": "descripcion", "align": "left"},
-                {"name": "audio", "label": "Archivo de Audio", "field": "audio", "align": "left"},
-                {"name": "estado", "label": "Estado", "field": "estado", "align": "center"},
-            ]
+def crear_tabla_horarios():
+    with ui.card().classes("w-full shadow-sm"):
+        with ui.row().classes("w-full items-center justify-between mb-2"):
+            ui.label("📋 Horarios Programados").classes("text-lg font-semibold text-gray-700")
 
-            filas = []
-            for h in horarios:
-                audio_nombre = h["ruta_audio"].name if h["ruta_audio"] else "🎵 Por defecto"
-                activo = "🟢 Activo" if h.get("activo", True) else "🔴 Inactivo"
-                filas.append({
-                    "id": h["id"],
-                    "hora": h["hora_str"],
-                    "descripcion": h.get("descripcion", "-"),
-                    "audio": audio_nombre,
-                    "estado": activo
-                })
+            async def refrescar_tabla():
+                exito, msg = recargar_configuracion()
+                tabla.rows = obtener_filas_horarios()
+                tabla.update()
+                if exito:
+                    ui.notify(f"✅ {msg}", type="positive")
+                else:
+                    ui.notify(f"❌ {msg}", type="negative", close_button=True)
 
-            if filas:
-                ui.table(columns=columnas, rows=filas, row_key="id").classes("w-full")
-            else:
-                ui.label("No hay horarios configurados o archivo no disponible").classes("text-gray-400 italic")
+            ui.button("Recargar config.json", icon="refresh", color="gray-700", on_click=refrescar_tabla).props("outline size=sm")
+
+        columnas = [
+            {"name": "id", "label": "ID", "field": "id", "align": "center", "sortable": True},
+            {"name": "hora", "label": "Hora", "field": "hora", "align": "center", "sortable": True},
+            {"name": "descripcion", "label": "Descripción", "field": "descripcion", "align": "left"},
+            {"name": "audio", "label": "Archivo de Audio", "field": "audio", "align": "left"},
+            {"name": "estado", "label": "Estado", "field": "estado", "align": "center"},
+        ]
+
+        tabla = ui.table(columns=columnas, rows=obtener_filas_horarios(), row_key="id").classes("w-full")
+
+        # Mantener la tabla sincronizada si config.json cambia externamente
+        def sincronizar_tabla():
+            nuevas_filas = obtener_filas_horarios()
+            if tabla.rows != nuevas_filas:
+                tabla.rows = nuevas_filas
+                tabla.update()
+
+        ui.timer(interval=2.0, callback=sincronizar_tabla)
 
 
 def crear_info_config():
@@ -488,9 +508,7 @@ def pagina_principal():
         crear_reloj()
         crear_estado_sistema()
         crear_info_config()
-        
-        contenedor_tabla = ui.column().classes("w-full")
-        crear_tabla_horarios(contenedor_tabla)
+        crear_tabla_horarios()
 
         ui.separator()
         ui.label("Sistema de Megafonía y Timbres Escolares | NiceGUI + Pygame Mixer").classes(

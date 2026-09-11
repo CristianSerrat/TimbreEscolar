@@ -208,6 +208,11 @@ def hora_coincide(hora_actual: dt_time, hora_programada: dt_time) -> bool:
             hora_actual.minute == hora_programada.minute)
 
 
+def es_dia_laborable(ahora: datetime) -> bool:
+    """Devuelve True solo si el día de la semana es de lunes (0) a viernes (4)."""
+    return ahora.weekday() < 5  # 0=lunes … 4=viernes; 5=sábado, 6=domingo
+
+
 def sonar_timbre(horario: dict, zona: str):
     global ultimo_timbre_minuto
 
@@ -252,10 +257,11 @@ def bucle_planificador(config: dict, horarios: list):
         ahora = obtener_hora_actual(zona)
         hora_actual = ahora.time()
 
-        for horario in horarios_activos:
-            if hora_coincide(hora_actual, horario["hora_obj"]):
-                sonar_timbre(horario, zona)
-
+        if es_dia_laborable(ahora):
+            for horario in horarios_activos:
+                if hora_coincide(hora_actual, horario["hora_obj"]):
+                    sonar_timbre(horario, zona)
+        
         time.sleep(1)
 
 

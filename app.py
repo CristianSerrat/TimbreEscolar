@@ -253,6 +253,11 @@ def hora_coincide(hora_actual: dt_time, hora_programada: dt_time) -> bool:
             hora_actual.minute == hora_programada.minute)
 
 
+def es_dia_laborable(ahora: datetime) -> bool:
+    """Devuelve True solo si el día de la semana es de lunes (0) a viernes (4)."""
+    return ahora.weekday() < 5  # 0=lunes … 4=viernes; 5=sábado, 6=domingo
+
+
 # ============================================================
 # NOTIFICACIONES A CLIENTES WEB
 # ============================================================
@@ -293,29 +298,30 @@ async def bucle_planificador():
 
             horarios_activos = [h for h in estado_sistema.get("horarios", []) if h.get("activo", True)]
 
-            for horario in horarios_activos:
-                if hora_coincide(hora_actual, horario["hora_obj"]):
-                    # Anti-repetición: solo una vez por minuto
-                    if estado_sistema["ultimo_timbre_minuto"] != minuto_actual:
-                        estado_sistema["ultimo_timbre_minuto"] = minuto_actual
-                        estado_sistema["ultimo_timbre_tocado"] = f"{horario['descripcion']} ({minuto_actual})"
+            if es_dia_laborable(ahora):
+                for horario in horarios_activos:
+                    if hora_coincide(hora_actual, horario["hora_obj"]):
+                        # Anti-repetición: solo una vez por minuto
+                        if estado_sistema["ultimo_timbre_minuto"] != minuto_actual:
+                            estado_sistema["ultimo_timbre_minuto"] = minuto_actual
+                            estado_sistema["ultimo_timbre_tocado"] = f"{horario['descripcion']} ({minuto_actual})"
 
-                        log(f"{'='*50}", "timbre")
-                        log(f"¡TIMBRE! {horario['descripcion']} ({horario['hora_str']})", "timbre")
-                        log(f"Audio: {horario['ruta_audio'].name if horario['ruta_audio'] else 'N/A'}", "timbre")
-                        log(f"{'='*50}", "timbre")
+                            log(f"{'='*50}", "timbre")
+                            log(f"¡TIMBRE! {horario['descripcion']} ({horario['hora_str']})", "timbre")
+                            log(f"Audio: {horario['ruta_audio'].name if horario['ruta_audio'] else 'N/A'}", "timbre")
+                            log(f"{'='*50}", "timbre")
 
-                        notificar_clientes(
-                            f"🔔 ¡TIMBRE! {horario['descripcion']} ({horario['hora_str']})",
-                            tipo="positive"
-                        )
+                            notificar_clientes(
+                                f"🔔 ¡TIMBRE! {horario['descripcion']} ({horario['hora_str']})",
+                                tipo="positive"
+                            )
 
-                        # Reproducir audio de forma asíncrona
-                        exito = await reproducir_audio(horario["ruta_audio"], horario.get("volumen", 0.8))
-                        if exito:
-                            log(f"Timbre '{horario['descripcion']}' completado con éxito", "ok")
-                        else:
-                            log(f"Fallo al reproducir timbre '{horario['descripcion']}'", "error")
+                            # Reproducir audio de forma asíncrona
+                            exito = await reproducir_audio(horario["ruta_audio"], horario.get("volumen", 0.8))
+                            if exito:
+                                log(f"Timbre '{horario['descripcion']}' completado con éxito", "ok")
+                            else:
+                                log(f"Fallo al reproducir timbre '{horario['descripcion']}'", "error")
 
         except asyncio.CancelledError:
             log("Tarea del planificador cancelada", "warn")
@@ -351,7 +357,7 @@ def crear_cabecera():
         with ui.row().classes("w-full items-center justify-between px-4"):
             with ui.row().classes("items-center gap-2"):
                 ui.icon("notifications_active", size="28px")
-                ui.label("Sistema de Megafonía y Timbres Escolares").classes("text-xl font-bold")
+                ui.label("Sistema de Timbre Escolar ISP").classes("text-xl font-bold")
             ui.label("Panel de Control").classes("text-sm opacity-90")
 
 
@@ -366,7 +372,7 @@ def crear_reloj():
         def actualizar_reloj():
             ahora = obtener_hora_actual(estado_sistema.get("zona_horaria", "Europe/Madrid"))
             hora_label.set_text(ahora.strftime("%H:%M:%S"))
-            fecha_label.set_text(ahora.strftime("%A, %d de %B de %Y"))
+            fecha_label.set_text(ahora.strftime("%A, %d of %B of %Y"))
 
         ui.timer(interval=1.0, callback=actualizar_reloj)
         actualizar_reloj()
